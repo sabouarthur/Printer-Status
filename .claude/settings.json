@@ -1,0 +1,8 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(python -c \"import zipfile; z=zipfile.ZipFile\\('e:/AI/STATUS IMPRIMANTE/PrinterStatus.zip'\\); print\\('\\\\n'.join\\(z.namelist\\(\\)[:30]\\)\\)\")",
+      "Bash(python -m py_compile kodak_monitor.py)"
+    ]
+  }
+}

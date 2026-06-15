@@ -1,0 +1,23 @@
+{
+  "allow_popup_close": false,
+  "fullscreen_on_error": false,
+  "hide_popup_when_ready": false,
+  "protect_config_access": false,
+  "config_access_pin_hash": "pbkdf2_sha256$200000$3314dcd481a774bcbb52043be4dc520b$95d0f5a9ef195cc2283c9d976762dac31094d9d734923d7561bbfe34ea614c82",
+  "print_counter_file": "C:/SynologyDrive/MAGASINS/Compteur/MAG-TEST-OFFICE.json",
+  "scan_interval": 2,
+  "scan_detail_interval": 60,
+  "max_untrusted_identity_delta": 200,
+  "hotfolder_path": "D:/AI/KM/SHIVA/STATUS IMPRIMANTE/hotfolder",
+  "hotfolder_printer": "KODAK 6850 Printer",
+  "hotfolder_copies": 1,
+  "hotfolder_action": "Supprimer apres impression",
+  "sdk_print_gap_seconds": 2,
+  "windows_driver_post_print_delay": 25,
+  "sdk_print_notice_seconds": 30,
+  "log_retention_days": 30,
+  "log_max_mb": 1,
+  "popup_font_size": 10,
+  "popup_x": 4429,
+  "popup_y": 1252
+}

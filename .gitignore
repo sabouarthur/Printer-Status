@@ -1,0 +1,32 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+
+# Build artifacts
+build/
+dist/
+
+# Logs et données dynamiques
+*.log
+kodak_printer_status.json
+.kodak_hw_identities.json
+.kodak_hw_totals.json
+.kodak_hw_totals.json.bak
+.kodak_monitor.lock
+
+# Sauvegardes
+*.bak
+*.before_recreate_*
+
+# Archives
+SDK.zip
+_sdk_extract/
+
+# Windows
+desktop.ini
+Thumbs.db
+
+# VS Code
+*.code-workspace
+
