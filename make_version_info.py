@@ -7,6 +7,7 @@ import re
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 SOURCE_FILE = os.path.join(SCRIPT_DIR, "kodak_monitor.py")
 OUTPUT_FILE = os.path.join(SCRIPT_DIR, "version_info.txt")
+RELEASE_VERSION_FILE = os.path.join(SCRIPT_DIR, "release", "VERSION.txt")
 
 COMPANY_NAME = "KM SHIVA"
 FILE_DESCRIPTION = "Kodak Printer Monitor"
@@ -69,7 +70,13 @@ def main():
 """
     with open(OUTPUT_FILE, "w", encoding="utf-8") as f:
         f.write(content)
-    print(f"version_info.txt genere — version {version_dotted}")
+
+    os.makedirs(os.path.dirname(RELEASE_VERSION_FILE), exist_ok=True)
+    with open(RELEASE_VERSION_FILE, "w", encoding="utf-8", newline="\n") as f:
+        f.write(version_dotted + "\n")
+
+    print(f"version_info.txt genere - version {version_dotted}")
+    print(f"release/VERSION.txt synchronise - version {version_dotted}")
 
 
 if __name__ == "__main__":

@@ -30,3 +30,6 @@ kodak_monitor - 23-04-26.py
 # Système / IDE
 desktop.ini
 .claude/
+
+# Dossier de test local pour le script de deploiement (jamais versionne)
+deploy/test_install/
