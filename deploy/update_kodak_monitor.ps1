@@ -79,12 +79,20 @@ $exePath    = Join-Path $InstallDir "KodakMonitor.exe"
 $configPath = Join-Path $InstallDir "kodak_monitor_config.json"
 Write-Host "Dossier d'installation : $InstallDir"
 
-# --- 2. Arreter l'application si elle tourne ---
-$proc = Get-Process -Name "KodakMonitor" -ErrorAction SilentlyContinue | Select-Object -First 1
-if ($proc) {
-    Write-Step "Arret de KodakMonitor.exe (PID $($proc.Id))"
-    Stop-Process -Id $proc.Id -Force
+# --- 2. Arreter l'application si elle tourne (PyInstaller --onefile lance
+#         souvent 2 process : le bootloader + l'app elle-meme -> on arrete
+#         TOUTES les instances trouvees, pas seulement la premiere) ---
+$procs = Get-Process -Name "KodakMonitor" -ErrorAction SilentlyContinue
+if ($procs) {
+    Write-Step "Arret de KodakMonitor.exe ($($procs.Count) process trouve(s) : $($procs.Id -join ', '))"
+    $procs | Stop-Process -Force
     Start-Sleep -Seconds 2
+    # Verification : si un fichier reste verrouille, on attend un peu plus
+    $retries = 0
+    while ((Get-Process -Name "KodakMonitor" -ErrorAction SilentlyContinue) -and $retries -lt 5) {
+        Start-Sleep -Seconds 1
+        $retries++
+    }
 } else {
     Write-Host "KodakMonitor.exe n'etait pas en cours d'execution."
 }
@@ -98,7 +106,21 @@ if (Test-Path $exePath) {
 
 # --- 4. Telecharger la nouvelle version + DLL SDK manquantes ---
 Write-Step "Telechargement de la derniere version depuis GitHub"
-Invoke-WebRequest -Uri "$RepoRawBase/release/KodakMonitor.exe" -OutFile $exePath -UseBasicParsing
+$downloadOk = $false
+for ($i = 1; $i -le 3; $i++) {
+    try {
+        Invoke-WebRequest -Uri "$RepoRawBase/release/KodakMonitor.exe" -OutFile $exePath -UseBasicParsing
+        $downloadOk = $true
+        break
+    } catch {
+        Write-Host "Tentative $i echouee ($($_.Exception.Message)), nouvel essai dans 2s..."
+        Start-Sleep -Seconds 2
+    }
+}
+if (-not $downloadOk) {
+    Write-Error "Impossible de telecharger/remplacer KodakMonitor.exe apres 3 tentatives. Mise a jour annulee."
+    exit 1
+}
 
 $dllFiles = @(
     @{Folder = "68xx"; Name = "chcusb.dll"},
