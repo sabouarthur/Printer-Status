@@ -6,10 +6,9 @@
 .DESCRIPTION
     A executer (via l'outil de prise en main a distance) sur chacun des
     22 postes magasin. Le script :
-      1. Retrouve le dossier d'installation via le process KodakMonitor.exe
-         actuellement en cours d'execution (pas besoin de connaitre le
-         chemin a l'avance, il peut varier d'un magasin a l'autre).
-      2. Arrete l'application, sauvegarde l'ancien exe.
+      1. Utilise le dossier d'installation fixe (C:\PrinterStatus par defaut,
+         identique sur tous les postes magasin).
+      2. Arrete l'application si elle tourne, sauvegarde l'ancien exe.
       3. Telecharge la derniere version depuis GitHub (repo public) et les
          DLL SDK manquantes.
       4. Met a jour kodak_monitor_config.json : active l'ecran de veille,
@@ -18,6 +17,9 @@
          Les autres reglages du magasin (hotfolder, compteur, etc.) ne
          sont pas touches.
       5. Relance KodakMonitor.exe.
+
+.PARAMETER InstallDir
+    Dossier d'installation de Kodak Monitor sur le poste magasin.
 
 .PARAMETER Pin
     PIN de deverrouillage de l'ecran de veille, commun a la flotte.
@@ -33,6 +35,7 @@
 #>
 
 param(
+    [string]$InstallDir = "C:\PrinterStatus",
     [string]$Pin = "888",
     [int]$TimeoutMinutes = 10,
     [string]$RepoRawBase = "https://raw.githubusercontent.com/sabouarthur/Printer-Status/main"
@@ -65,23 +68,26 @@ function Set-JsonProp($Obj, $Name, $Value) {
     }
 }
 
-Write-Step "Mise a jour Kodak Monitor — PIN ecran de veille + derniere version"
+Write-Step "Mise a jour Kodak Monitor - PIN ecran de veille + derniere version"
 
-# --- 1. Localiser l'installation via le process en cours ---
-$proc = Get-Process -Name "KodakMonitor" -ErrorAction SilentlyContinue | Select-Object -First 1
-if (-not $proc) {
-    Write-Error "KodakMonitor.exe n'est pas en cours d'execution sur ce poste. Mise a jour annulee (impossible de localiser le dossier d'installation). Lancez l'application au moins une fois, puis relancez ce script."
+# --- 1. Dossier d'installation (fixe sur tous les postes magasin) ---
+if (-not (Test-Path $InstallDir)) {
+    Write-Error "Dossier introuvable : $InstallDir. Mise a jour annulee."
     exit 1
 }
-$installDir = Split-Path -Path $proc.Path -Parent
-$exePath    = Join-Path $installDir "KodakMonitor.exe"
-$configPath = Join-Path $installDir "kodak_monitor_config.json"
-Write-Host "Dossier detecte : $installDir"
+$exePath    = Join-Path $InstallDir "KodakMonitor.exe"
+$configPath = Join-Path $InstallDir "kodak_monitor_config.json"
+Write-Host "Dossier d'installation : $InstallDir"
 
-# --- 2. Arreter l'application ---
-Write-Step "Arret de KodakMonitor.exe (PID $($proc.Id))"
-Stop-Process -Id $proc.Id -Force
-Start-Sleep -Seconds 2
+# --- 2. Arreter l'application si elle tourne ---
+$proc = Get-Process -Name "KodakMonitor" -ErrorAction SilentlyContinue | Select-Object -First 1
+if ($proc) {
+    Write-Step "Arret de KodakMonitor.exe (PID $($proc.Id))"
+    Stop-Process -Id $proc.Id -Force
+    Start-Sleep -Seconds 2
+} else {
+    Write-Host "KodakMonitor.exe n'etait pas en cours d'execution."
+}
 
 # --- 3. Sauvegarder l'ancien exe ---
 if (Test-Path $exePath) {
@@ -130,14 +136,14 @@ Set-JsonProp $config "screensaver_timeout_minutes" $TimeoutMinutes
 Set-JsonProp $config "screensaver_pin_hash" $pinHash
 
 $config | ConvertTo-Json -Depth 5 | Set-Content -Path $configPath -Encoding utf8
-Write-Host "Ecran de veille active — delai: $TimeoutMinutes min, PIN: $('*' * $Pin.Length)"
+Write-Host "Ecran de veille active - delai: $TimeoutMinutes min, PIN: $('*' * $Pin.Length)"
 
 # --- 6. Relancer l'application ---
 Write-Step "Relance de KodakMonitor.exe"
 Start-Process -FilePath $exePath -WorkingDirectory $installDir
 Start-Sleep -Seconds 2
 if (Get-Process -Name "KodakMonitor" -ErrorAction SilentlyContinue) {
-    Write-Host "OK — KodakMonitor.exe relance avec succes." -ForegroundColor Green
+    Write-Host "OK - KodakMonitor.exe relance avec succes." -ForegroundColor Green
 } else {
-    Write-Warning "KodakMonitor.exe ne semble pas avoir redemarre — verification manuelle necessaire."
+    Write-Warning "KodakMonitor.exe ne semble pas avoir redemarre - verification manuelle necessaire."
 }
