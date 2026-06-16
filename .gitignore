@@ -16,6 +16,7 @@ kodak_monitor_config - Copie.json
 kodak_printer_status.json
 kodak_print.log
 build_output.log
+build_output_2.log
 .kodak_hw_identities.json
 .kodak_hw_totals.json
 .kodak_hw_totals.json.bak
