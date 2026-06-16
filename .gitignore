@@ -1,0 +1,31 @@
+# Build / dist (régénérés par build_exe.bat)
+build/
+dist/
+*.spec
+__pycache__/
+*.pyc
+
+# Archives SDK volumineuses (fournies séparément par Kodak)
+SDK.zip
+_sdk_extract/
+
+# État local / runtime (régénéré automatiquement, spécifique à chaque PC)
+kodak_monitor_config.json
+kodak_monitor_config.json.bak
+kodak_monitor_config - Copie.json
+kodak_printer_status.json
+kodak_print.log
+build_output.log
+.kodak_hw_identities.json
+.kodak_hw_totals.json
+.kodak_hw_totals.json.bak
+.kodak_monitor.lock
+hotfolder/imprime/*
+
+# Sauvegardes manuelles ponctuelles
+*.bak
+kodak_monitor - 23-04-26.py
+
+# Système / IDE
+desktop.ini
+.claude/
