@@ -20,6 +20,9 @@
          compatible nativement avec kodak_monitor.py). Les autres reglages
          du magasin (hotfolder, compteur, etc.) ne sont pas touches.
       6. Relance KodakMonitor.exe.
+      7. Verifie qu'un raccourci existe dans le dossier Startup de l'utilisateur
+         courant (demarrage automatique a chaque session Windows) ; le cree ou
+         le corrige si necessaire.
 
 .PARAMETER InstallDir
     Dossier d'installation de Kodak Monitor sur le poste magasin.
@@ -198,3 +201,34 @@ if (Get-Process -Name "KodakMonitor" -ErrorAction SilentlyContinue) {
 } else {
     Write-Warning "KodakMonitor.exe ne semble pas avoir redemarre - verification manuelle necessaire."
 }
+
+# --- 8. Verifier/creer le raccourci de demarrage automatique ---
+Write-Step "Verification du raccourci de demarrage automatique"
+$startupFolder = [System.Environment]::GetFolderPath("Startup")
+$shortcutPath  = Join-Path $startupFolder "KodakMonitor.lnk"
+
+if (Test-Path $shortcutPath) {
+    # Verifier que le raccourci pointe bien vers le bon exe
+    $wsh = New-Object -ComObject WScript.Shell
+    $existing = $wsh.CreateShortcut($shortcutPath)
+    if ($existing.TargetPath -ieq $exePath) {
+        Write-Host "Raccourci demarrage deja correct : $shortcutPath"
+    } else {
+        Write-Host "Raccourci existant incorrect ($($existing.TargetPath)) - mise a jour..."
+        $sc = $wsh.CreateShortcut($shortcutPath)
+        $sc.TargetPath       = $exePath
+        $sc.WorkingDirectory = $InstallDir
+        $sc.Description      = "Kodak Printer Monitor"
+        $sc.Save()
+        Write-Host "Raccourci mis a jour : $shortcutPath" -ForegroundColor Green
+    }
+} else {
+    $wsh = New-Object -ComObject WScript.Shell
+    $sc  = $wsh.CreateShortcut($shortcutPath)
+    $sc.TargetPath       = $exePath
+    $sc.WorkingDirectory = $InstallDir
+    $sc.Description      = "Kodak Printer Monitor"
+    $sc.Save()
+    Write-Host "Raccourci cree : $shortcutPath" -ForegroundColor Green
+}
+Write-Host "L'application demarrera automatiquement a chaque session Windows."
