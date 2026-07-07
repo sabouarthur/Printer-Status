@@ -60,7 +60,7 @@ def _configure_console_output():
 
 _configure_console_output()
 
-APP_VERSION = "2.1.0"  # 2026-06-16 — écran de veille (verrouillage PIN multi-écrans)
+APP_VERSION = "2.2"  # 2026-07-07 — veille: activité écran Windows globale
 WINDOWS_SPOOLER_GRACE_SECONDS = 12
 WINDOWS_SPOOLER_POLL_SECONDS = 0.25
 KODAK_PRINTER_HINTS = ("KODAK", "6850", "6800", "6950", "6900")
@@ -1698,6 +1698,30 @@ def run_gui(mon):
     root.bind_all("<Button>", _note_activity, add="+")
     root.bind_all("<Key>", _note_activity, add="+")
 
+    def _windows_idle_seconds():
+        """Temps d'inactivité Windows global, même si l'utilisateur agit hors de l'app."""
+        if os.name != "nt":
+            return None
+        try:
+            class LASTINPUTINFO(ctypes.Structure):
+                _fields_ = [("cbSize", ctypes.c_uint), ("dwTime", ctypes.c_uint)]
+
+            info = LASTINPUTINFO()
+            info.cbSize = ctypes.sizeof(LASTINPUTINFO)
+            if not ctypes.windll.user32.GetLastInputInfo(ctypes.byref(info)):
+                return None
+            tick = ctypes.windll.kernel32.GetTickCount()
+            elapsed_ms = (int(tick) - int(info.dwTime)) & 0xFFFFFFFF
+            return elapsed_ms / 1000.0
+        except Exception:
+            return None
+
+    def _current_idle_seconds():
+        system_idle = _windows_idle_seconds()
+        if system_idle is not None:
+            return system_idle
+        return time.time() - last_activity[0]
+
     def _enum_monitor_rects():
         """Liste des rectangles (left, top, right, bottom) de chaque écran physique."""
         rects = []
@@ -1862,7 +1886,7 @@ def run_gui(mon):
                     and not (veille_wins and any(w.winfo_exists() for w in veille_wins))
                     and not (config_pin_prompt[0] and config_pin_prompt[0].winfo_exists())):
                 timeout_sec = max(1, int(screensaver_timeout_min.get())) * 60
-                if time.time() - last_activity[0] >= timeout_sec:
+                if _current_idle_seconds() >= timeout_sec:
                     show_veille_lock()
         except Exception as e:
             log_print(f"⚠ Vérification veille impossible: {e}")
