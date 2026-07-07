@@ -1,40 +1,28 @@
 <#
 .SYNOPSIS
-    Met a jour KodakMonitor.exe sur un poste magasin et active l'ecran de
-    veille (verrouillage PIN) avec un PIN et un delai communs a la flotte.
+    Updates KodakMonitor.exe on a store PC to the latest published version.
 
 .DESCRIPTION
-    A executer (via l'outil de prise en main a distance) sur chacun des
-    22 postes magasin. Le script :
-      1. Utilise le dossier d'installation fixe (C:\PrinterStatus par defaut,
-         identique sur tous les postes magasin).
-      2. Compare la version de l'exe local a la derniere version publiee
-         (release/VERSION.txt, tres leger) : si c'est deja la derniere,
-         l'etape de telechargement de l'exe est sautee.
-      3. Arrete l'application si elle tourne, sauvegarde l'ancien exe.
-      4. Telecharge la derniere version depuis GitHub (repo public, sauf si
-         deja a jour) et les DLL SDK manquantes.
-      5. Sauvegarde kodak_monitor_config.json avant toute modification,
-         puis le met a jour : active l'ecran de veille, fixe le delai
-         d'inactivite et le PIN de deverrouillage (hash PBKDF2-SHA256,
-         compatible nativement avec kodak_monitor.py). Les autres reglages
-         du magasin (hotfolder, compteur, etc.) ne sont pas touches.
-      6. Relance KodakMonitor.exe.
-      7. Verifie qu'un raccourci existe dans le dossier Startup de l'utilisateur
-         courant (demarrage automatique a chaque session Windows) ; le cree ou
-         le corrige si necessaire.
+    Run this (via the remote support tool) on each of the 22 store PCs.
+    The script:
+      1. Uses the fixed install folder (C:\PrinterStatus by default,
+         identical on every store PC).
+      2. Compares the local exe version to the latest published version
+         (release/VERSION.txt, very lightweight): if it's already the
+         latest, the exe download step is skipped.
+      3. Stops the application if it's running, backs up the old exe.
+      4. Downloads the latest version from GitHub (public repo, unless
+         already up to date) and any missing SDK DLLs.
+      5. Restarts KodakMonitor.exe.
+      6. Checks that a shortcut exists in the current user's Startup
+         folder (auto-start on every Windows session); creates or fixes
+         it if needed.
 
 .PARAMETER InstallDir
-    Dossier d'installation de Kodak Monitor sur le poste magasin.
-
-.PARAMETER Pin
-    PIN de deverrouillage de l'ecran de veille, commun a la flotte.
-
-.PARAMETER TimeoutMinutes
-    Delai d'inactivite (minutes) avant verrouillage automatique.
+    Kodak Monitor install folder on the store PC.
 
 .PARAMETER RepoRawBase
-    Base URL "raw" du depot GitHub public contenant la derniere version.
+    "Raw" base URL of the public GitHub repo containing the latest version.
 
 .EXAMPLE
     powershell -ExecutionPolicy Bypass -File update_kodak_monitor.ps1
@@ -42,8 +30,6 @@
 
 param(
     [string]$InstallDir = "C:\PrinterStatus",
-    [string]$Pin = "888",
-    [int]$TimeoutMinutes = 10,
     [string]$RepoRawBase = "https://raw.githubusercontent.com/sabouarthur/Printer-Status/main"
 )
 
@@ -51,86 +37,62 @@ $ErrorActionPreference = "Stop"
 
 function Write-Step($msg) { Write-Host "==> $msg" -ForegroundColor Cyan }
 
-function New-KodakPinHash {
-    <# Genere un hash strictement compatible avec _hash_config_pin() de kodak_monitor.py
-       (PBKDF2-HMAC-SHA256, 200000 iterations, format "pbkdf2_sha256$iter$salt_hex$hash_hex"). #>
-    param([string]$PlainPin, [int]$Iterations = 200000)
-    $saltBytes = New-Object byte[] 16
-    [System.Security.Cryptography.RandomNumberGenerator]::Create().GetBytes($saltBytes)
-    $derive = New-Object System.Security.Cryptography.Rfc2898DeriveBytes(
-        $PlainPin, $saltBytes, $Iterations, [System.Security.Cryptography.HashAlgorithmName]::SHA256
-    )
-    $hashBytes = $derive.GetBytes(32)
-    $saltHex = -join ($saltBytes | ForEach-Object { $_.ToString("x2") })
-    $hashHex = -join ($hashBytes | ForEach-Object { $_.ToString("x2") })
-    return "pbkdf2_sha256" + '$' + $Iterations + '$' + $saltHex + '$' + $hashHex
-}
+Write-Step "Updating Kodak Monitor - latest version"
 
-function Set-JsonProp($Obj, $Name, $Value) {
-    if ($Obj.PSObject.Properties.Name -contains $Name) {
-        $Obj.$Name = $Value
-    } else {
-        $Obj | Add-Member -NotePropertyName $Name -NotePropertyValue $Value -Force
-    }
-}
-
-Write-Step "Mise a jour Kodak Monitor - PIN ecran de veille + derniere version"
-
-# --- 1. Dossier d'installation (fixe sur tous les postes magasin) ---
+# --- 1. Install folder (fixed on every store PC) ---
 if (-not (Test-Path $InstallDir)) {
-    Write-Error "Dossier introuvable : $InstallDir. Mise a jour annulee."
+    Write-Error "Folder not found: $InstallDir. Update cancelled."
     exit 1
 }
-$exePath    = Join-Path $InstallDir "KodakMonitor.exe"
-$configPath = Join-Path $InstallDir "kodak_monitor_config.json"
-Write-Host "Dossier d'installation : $InstallDir"
+$exePath = Join-Path $InstallDir "KodakMonitor.exe"
+Write-Host "Install folder: $InstallDir"
 
-# --- 2. Verifier si l'exe local est deja la derniere version ---
+# --- 2. Check whether the local exe is already the latest version ---
 $needsDownload = $true
 if (Test-Path $exePath) {
     try {
         $localVersion = (Get-Item $exePath).VersionInfo.FileVersion
         $remoteVersion = (Invoke-WebRequest -Uri "$RepoRawBase/release/VERSION.txt" -UseBasicParsing).Content.Trim()
-        Write-Host "Version locale : $localVersion / Version distante : $remoteVersion"
+        Write-Host "Local version: $localVersion / Remote version: $remoteVersion"
         if ($localVersion -and $remoteVersion -and ($localVersion -eq $remoteVersion)) {
             $needsDownload = $false
-            Write-Host "Deja a jour - telechargement de l'exe ignore."
+            Write-Host "Already up to date - skipping exe download."
         }
     } catch {
-        Write-Host "Impossible de verifier la version distante ($($_.Exception.Message)) - telechargement par precaution."
+        Write-Host "Could not check the remote version ($($_.Exception.Message)) - downloading as a precaution."
     }
 } else {
-    Write-Host "Aucun exe local trouve - telechargement necessaire."
+    Write-Host "No local exe found - download required."
 }
 
-# --- 3. Arreter l'application si elle tourne (PyInstaller --onefile lance
-#         souvent 2 process : le bootloader + l'app elle-meme -> on arrete
-#         TOUTES les instances trouvees, pas seulement la premiere) ---
+# --- 3. Stop the application if it's running (PyInstaller --onefile often
+#         launches 2 processes: the bootloader + the app itself -> stop
+#         ALL processes found, not just the first one) ---
 $procs = Get-Process -Name "KodakMonitor" -ErrorAction SilentlyContinue
 if ($procs) {
-    Write-Step "Arret de KodakMonitor.exe ($($procs.Count) process trouve(s) : $($procs.Id -join ', '))"
+    Write-Step "Stopping KodakMonitor.exe ($($procs.Count) process(es) found: $($procs.Id -join ', '))"
     $procs | Stop-Process -Force
     Start-Sleep -Seconds 2
-    # Verification : si un fichier reste verrouille, on attend un peu plus
+    # Check: if a file is still locked, wait a bit longer
     $retries = 0
     while ((Get-Process -Name "KodakMonitor" -ErrorAction SilentlyContinue) -and $retries -lt 5) {
         Start-Sleep -Seconds 1
         $retries++
     }
 } else {
-    Write-Host "KodakMonitor.exe n'etait pas en cours d'execution."
+    Write-Host "KodakMonitor.exe was not running."
 }
 
-# --- 4. Sauvegarder l'ancien exe ---
+# --- 4. Back up the old exe ---
 if (Test-Path $exePath) {
     $backupPath = Join-Path $InstallDir ("KodakMonitor.exe.bak_" + (Get-Date -Format "yyyyMMdd_HHmmss"))
     Copy-Item -Path $exePath -Destination $backupPath -Force
-    Write-Host "Ancienne version sauvegardee : $backupPath"
+    Write-Host "Previous version backed up: $backupPath"
 }
 
-# --- 5. Telecharger la nouvelle version (si necessaire) + DLL SDK manquantes ---
+# --- 5. Download the new version (if needed) + missing SDK DLLs ---
 if ($needsDownload) {
-    Write-Step "Telechargement de la derniere version depuis GitHub"
+    Write-Step "Downloading the latest version from GitHub"
     $downloadOk = $false
     for ($i = 1; $i -le 3; $i++) {
         try {
@@ -138,16 +100,16 @@ if ($needsDownload) {
             $downloadOk = $true
             break
         } catch {
-            Write-Host "Tentative $i echouee ($($_.Exception.Message)), nouvel essai dans 2s..."
+            Write-Host "Attempt $i failed ($($_.Exception.Message)), retrying in 2s..."
             Start-Sleep -Seconds 2
         }
     }
     if (-not $downloadOk) {
-        Write-Error "Impossible de telecharger/remplacer KodakMonitor.exe apres 3 tentatives. Mise a jour annulee."
+        Write-Error "Could not download/replace KodakMonitor.exe after 3 attempts. Update cancelled."
         exit 1
     }
 } else {
-    Write-Step "Etape de telechargement ignoree (exe deja a jour)"
+    Write-Step "Download step skipped (exe already up to date)"
 }
 
 $dllFiles = @(
@@ -166,61 +128,40 @@ foreach ($f in $dllFiles) {
     if (-not (Test-Path $destFolder)) { New-Item -ItemType Directory -Path $destFolder -Force | Out-Null }
     $dest = Join-Path $destFolder $f.Name
     if (-not (Test-Path $dest)) {
-        Write-Host "Telechargement DLL manquante : $($f.Folder)\$($f.Name)"
+        Write-Host "Downloading missing DLL: $($f.Folder)\$($f.Name)"
         Invoke-WebRequest -Uri "$RepoRawBase/$($f.Folder)/$($f.Name)" -OutFile $dest -UseBasicParsing
     }
 }
 
-# --- 6. Sauvegarder kodak_monitor_config.json puis le mettre a jour
-#         (ecran de veille) sans toucher aux autres reglages du magasin ---
-Write-Step "Mise a jour de la configuration (ecran de veille)"
-if (Test-Path $configPath) {
-    $configBackupPath = Join-Path $InstallDir ("kodak_monitor_config.json.bak_" + (Get-Date -Format "yyyyMMdd_HHmmss"))
-    Copy-Item -Path $configPath -Destination $configBackupPath -Force
-    Write-Host "Config sauvegardee : $configBackupPath"
-    $config = Get-Content -Path $configPath -Raw | ConvertFrom-Json
-} else {
-    $config = [PSCustomObject]@{}
-}
-
-$pinHash = New-KodakPinHash -PlainPin $Pin
-
-Set-JsonProp $config "screensaver_enabled" $true
-Set-JsonProp $config "screensaver_timeout_minutes" $TimeoutMinutes
-Set-JsonProp $config "screensaver_pin_hash" $pinHash
-
-$config | ConvertTo-Json -Depth 5 | Set-Content -Path $configPath -Encoding utf8
-Write-Host "Ecran de veille active - delai: $TimeoutMinutes min, PIN: $('*' * $Pin.Length)"
-
-# --- 7. Relancer l'application ---
-Write-Step "Relance de KodakMonitor.exe"
+# --- 6. Restart the application ---
+Write-Step "Restarting KodakMonitor.exe"
 Start-Process -FilePath $exePath -WorkingDirectory $InstallDir
 Start-Sleep -Seconds 2
 if (Get-Process -Name "KodakMonitor" -ErrorAction SilentlyContinue) {
-    Write-Host "OK - KodakMonitor.exe relance avec succes." -ForegroundColor Green
+    Write-Host "OK - KodakMonitor.exe restarted successfully." -ForegroundColor Green
 } else {
-    Write-Warning "KodakMonitor.exe ne semble pas avoir redemarre - verification manuelle necessaire."
+    Write-Warning "KodakMonitor.exe does not seem to have restarted - manual check required."
 }
 
-# --- 8. Verifier/creer le raccourci de demarrage automatique ---
-Write-Step "Verification du raccourci de demarrage automatique"
+# --- 7. Check/create the auto-start shortcut ---
+Write-Step "Checking the auto-start shortcut"
 $startupFolder = [System.Environment]::GetFolderPath("Startup")
 $shortcutPath  = Join-Path $startupFolder "KodakMonitor.lnk"
 
 if (Test-Path $shortcutPath) {
-    # Verifier que le raccourci pointe bien vers le bon exe
+    # Check that the shortcut points to the right exe
     $wsh = New-Object -ComObject WScript.Shell
     $existing = $wsh.CreateShortcut($shortcutPath)
     if ($existing.TargetPath -ieq $exePath) {
-        Write-Host "Raccourci demarrage deja correct : $shortcutPath"
+        Write-Host "Startup shortcut already correct: $shortcutPath"
     } else {
-        Write-Host "Raccourci existant incorrect ($($existing.TargetPath)) - mise a jour..."
+        Write-Host "Existing shortcut is incorrect ($($existing.TargetPath)) - updating..."
         $sc = $wsh.CreateShortcut($shortcutPath)
         $sc.TargetPath       = $exePath
         $sc.WorkingDirectory = $InstallDir
         $sc.Description      = "Kodak Printer Monitor"
         $sc.Save()
-        Write-Host "Raccourci mis a jour : $shortcutPath" -ForegroundColor Green
+        Write-Host "Shortcut updated: $shortcutPath" -ForegroundColor Green
     }
 } else {
     $wsh = New-Object -ComObject WScript.Shell
@@ -229,6 +170,6 @@ if (Test-Path $shortcutPath) {
     $sc.WorkingDirectory = $InstallDir
     $sc.Description      = "Kodak Printer Monitor"
     $sc.Save()
-    Write-Host "Raccourci cree : $shortcutPath" -ForegroundColor Green
+    Write-Host "Shortcut created: $shortcutPath" -ForegroundColor Green
 }
-Write-Host "L'application demarrera automatiquement a chaque session Windows."
+Write-Host "The application will start automatically on every Windows session."
